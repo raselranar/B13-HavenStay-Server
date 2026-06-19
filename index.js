@@ -42,6 +42,15 @@ async function run() {
         .toArray();
       res.send(featuredProperties);
     });
+    // Recently Added Properties
+    app.get("/api/properties/recent", async (req, res) => {
+      const recentProperties = await propertiesCollection
+        .find({ status: "Approved" })
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .toArray();
+      res.send(recentProperties);
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
