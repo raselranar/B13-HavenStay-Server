@@ -33,6 +33,15 @@ async function run() {
       const properties = await propertiesCollection.find().toArray();
       res.send(properties);
     });
+
+    // Featured Properties
+    app.get("/api/properties/featured", async (req, res) => {
+      const featuredProperties = await propertiesCollection
+        .find({ status: "Approved" })
+        .limit(6)
+        .toArray();
+      res.send(featuredProperties);
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
