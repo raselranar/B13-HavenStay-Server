@@ -1,4 +1,8 @@
 {
+  "type": "module",
+  "scripts": {
+    "serve": "node --watch index.js"
+  },
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
