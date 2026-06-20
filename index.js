@@ -27,6 +27,7 @@ async function run() {
     );
     const database = client.db("haven-stay");
     const propertiesCollection = database.collection("properties");
+    const favoritesCollection = database.collection("favorites");
 
     //  fetch all properties
     app.get("/api/properties", async (req, res) => {
@@ -36,7 +37,6 @@ async function run() {
     // fetch single property by id
     app.get("/api/properties/details/:id", async (req, res) => {
       const { id } = req.params;
-      console.log(id);
       const property = await propertiesCollection.findOne({
         _id: new ObjectId(id),
       });
@@ -59,6 +59,22 @@ async function run() {
         .limit(3)
         .toArray();
       res.send(recentProperties);
+    });
+    // Add to favorites
+    app.post("/api/properties/favorites", async (req, res) => {
+      const { userId, propertyId } = req.body;
+      console.log(req.body);
+      if (!userId || !propertyId) {
+        return res
+          .status(400)
+          .send({ message: "Missing userId or propertyId" });
+      }
+      const favorite = await favoritesCollection.insertOne({
+        userId,
+        propertyId,
+        createdAt: new Date(),
+      });
+      res.send(favorite);
     });
   } finally {
     // Ensures that the client will close when you finish/error
