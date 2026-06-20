@@ -1,4 +1,4 @@
-import { MongoClient, ServerApiVersion } from "mongodb";
+import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
@@ -32,6 +32,15 @@ async function run() {
     app.get("/api/properties", async (req, res) => {
       const properties = await propertiesCollection.find().toArray();
       res.send(properties);
+    });
+    // fetch single property by id
+    app.get("/api/properties/details/:id", async (req, res) => {
+      const { id } = req.params;
+      console.log(id);
+      const property = await propertiesCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      res.send(property);
     });
 
     // Featured Properties
