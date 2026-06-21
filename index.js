@@ -1,4 +1,5 @@
 import { MongoClient, ObjectId, ServerApiVersion } from "mongodb";
+import * as jose from "jose";
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
@@ -15,6 +16,41 @@ const client = new MongoClient(process.env.MONGODB_URI, {
     deprecationErrors: true,
   },
 });
+const JWKS = jose.createRemoteJWKSet(
+  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`),
+);
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+  console.log("line:32", { token, JWKS });
+  try {
+    const { payload } = await jose.jwtVerify(token, JWKS);
+
+    req.user = payload;
+    console.log("payload", payload);
+
+    next();
+  } catch (error) {
+    console.log(error);
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+};
+
+// verify tenant
+const verifyTenant = async (req, res, next) => {
+  const { user } = req;
+  if (user.role !== "tenant") {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+  next();
+};
 
 async function run() {
   try {
@@ -30,7 +66,8 @@ async function run() {
     const favoritesCollection = database.collection("favorites");
 
     //  fetch all properties
-    app.get("/api/properties", async (req, res) => {
+    app.get("/api/properties", verifyToken, verifyTenant, async (req, res) => {
+      console.log(req.headers);
       const properties = await propertiesCollection.find().toArray();
       res.send(properties);
     });
@@ -63,7 +100,6 @@ async function run() {
     // Add to favorites
     app.post("/api/properties/favorites", async (req, res) => {
       const { userId, propertyId } = req.body;
-      console.log(req.body);
       if (!userId || !propertyId) {
         return res
           .status(400)
