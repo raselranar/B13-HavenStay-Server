@@ -149,10 +149,10 @@ async function run() {
       // verifyTenant,
       async (req, res) => {
         const { propertyId, rating, comment } = req.body;
-        console.log(req);
-        const reviewerId = req.user?.sub || req.user?.userId || req.user?.id;
-        const reviewerName = req.user?.name || "Unknown";
-        const reviewerEmail = req.user?.email || "";
+        const user = req.body?.user;
+        const reviewerId = user?.session?.userId;
+        const reviewerName = user?.user?.name || "Unknown";
+        const reviewerEmail = user?.user?.email || "";
 
         if (!propertyId || !rating || !comment) {
           return res
