@@ -64,9 +64,10 @@ async function run() {
     const database = client.db("haven-stay");
     const propertiesCollection = database.collection("properties");
     const favoritesCollection = database.collection("favorites");
+    const bookingCollection = database.collection("bookings");
 
     //  fetch all properties
-    app.get("/api/properties", verifyToken, verifyTenant, async (req, res) => {
+    app.get("/api/properties", async (req, res) => {
       console.log(req.headers);
       const properties = await propertiesCollection.find().toArray();
       res.send(properties);
@@ -74,9 +75,19 @@ async function run() {
     // fetch single property by id
     app.get("/api/properties/details/:id", async (req, res) => {
       const { id } = req.params;
+      const userId = req.query?.userId;
+      console.log("userId", userId);
       const property = await propertiesCollection.findOne({
         _id: new ObjectId(id),
       });
+      const isFavorite = await favoritesCollection.findOne({
+        userId,
+        propertyId: id,
+      });
+      if (isFavorite) {
+        property.isFavorite = true;
+      }
+
       res.send(property);
     });
 
@@ -110,7 +121,84 @@ async function run() {
         propertyId,
         createdAt: new Date(),
       });
+      // update property
+      await propertiesCollection.updateOne(
+        { _id: new ObjectId(propertyId) },
+        { $inc: { favorites: 1 } },
+      );
       res.send(favorite);
+    });
+    // get favorites
+    app.get("/api/properties/favorites", async (req, res) => {
+      const { userId } = req.query;
+      console.log(req.url);
+      if (!userId) {
+        return res.status(400).send({ message: "Missing userId" });
+      }
+      const favorites = await favoritesCollection
+        .find({ userId: userId })
+        .toArray();
+      console.log(favorites);
+      res.send(favorites);
+    });
+
+    // tenant review submission
+    app.post(
+      "/api/properties/reviews",
+      // verifyToken,
+      // verifyTenant,
+      async (req, res) => {
+        const { propertyId, rating, comment } = req.body;
+        console.log(req);
+        const reviewerId = req.user?.sub || req.user?.userId || req.user?.id;
+        const reviewerName = req.user?.name || "Unknown";
+        const reviewerEmail = req.user?.email || "";
+
+        if (!propertyId || !rating || !comment) {
+          return res
+            .status(400)
+            .send({ message: "propertyId, rating, and comment are required" });
+        }
+
+        const property = await propertiesCollection.findOne({
+          _id: new ObjectId(propertyId),
+        });
+        if (!property) {
+          return res.status(404).send({ message: "Property not found" });
+        }
+
+        const review = {
+          reviewerId,
+          reviewerName,
+          reviewerEmail,
+          rating: Number(rating),
+          comment,
+          date: new Date(),
+        };
+
+        await propertiesCollection.updateOne(
+          { _id: new ObjectId(propertyId) },
+          { $push: { reviews: review } },
+        );
+
+        res.send({ review });
+      },
+    );
+
+    // add booking
+    app.post("/api/properties/bookings", async (req, res) => {
+      const { userId, propertyId } = req.body;
+      const data = req.body;
+      if (!userId || !propertyId) {
+        return res
+          .status(400)
+          .send({ message: "Missing userId or propertyId" });
+      }
+      const booking = await bookingCollection.insertOne({
+        ...data,
+        createdAt: new Date(),
+      });
+      res.send(booking);
     });
   } finally {
     // Ensures that the client will close when you finish/error
