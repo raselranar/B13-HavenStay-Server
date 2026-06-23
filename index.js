@@ -68,8 +68,25 @@ async function run() {
 
     //  fetch all properties
     app.get("/api/properties", async (req, res) => {
-      console.log(req.headers);
-      const properties = await propertiesCollection.find().toArray();
+      const query = { status: { $in: ["approved", "Approved"] } };
+      if (req.query.search) {
+        query.$or = [{ location: { $regex: req.query.search, $options: "i" } }];
+      }
+      if (req.query.type) {
+        query.propertyType = req.query.type;
+      }
+      let sortOption = {};
+      if (req.query.sort === "price_asc") {
+        sortOption = { rent: 1 };
+      } else if (req.query.sort === "price_desc") {
+        sortOption = { rent: -1 };
+      }
+
+      console.log(query);
+      const properties = await propertiesCollection
+        .find(query)
+        .sort(sortOption)
+        .toArray();
       res.send(properties);
     });
     // fetch single property by id
