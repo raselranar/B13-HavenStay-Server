@@ -81,6 +81,15 @@ async function run() {
       } else if (req.query.sort === "price_desc") {
         sortOption = { rent: -1 };
       }
+      if (req.query.minPrice) {
+        const minPrice = Number(req.query.minPrice);
+        console.log(minPrice);
+        query.rent = { $gte: minPrice };
+      }
+      if (req.query.maxPrice) {
+        const maxPrice = Number(req.query.maxPrice);
+        query.rent = { $lte: maxPrice };
+      }
 
       console.log(query);
       const properties = await propertiesCollection
