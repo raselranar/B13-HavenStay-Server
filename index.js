@@ -29,12 +29,12 @@ const verifyToken = async (req, res, next) => {
   if (!token) {
     return res.status(401).send({ message: "Unauthorized" });
   }
-  console.log("line:32", { token, JWKS });
+  // console.log("line:32", { token, JWKS });
   try {
     const { payload } = await jose.jwtVerify(token, JWKS);
 
     req.user = payload;
-    console.log("payload", payload);
+    // console.log("payload", payload);
 
     next();
   } catch (error) {
@@ -83,7 +83,7 @@ async function run() {
       }
       if (req.query.minPrice) {
         const minPrice = Number(req.query.minPrice);
-        console.log(minPrice);
+        // console.log(minPrice);
         query.rent = { $gte: minPrice };
       }
       if (req.query.maxPrice) {
@@ -91,7 +91,7 @@ async function run() {
         query.rent = { $lte: maxPrice };
       }
 
-      console.log(query);
+      // console.log(query);
       const properties = await propertiesCollection
         .find(query)
         .sort(sortOption)
@@ -102,7 +102,7 @@ async function run() {
     app.get("/api/properties/details/:id", async (req, res) => {
       const { id } = req.params;
       const userId = req.query?.userId;
-      console.log("userId", userId);
+      // console.log("userId", userId);
       const property = await propertiesCollection.findOne({
         _id: new ObjectId(id),
       });
@@ -154,18 +154,59 @@ async function run() {
       );
       res.send(favorite);
     });
+    // remove form favorites
+    app.delete("/api/properties/favorites", async (req, res) => {
+      const { _id } = req.body;
+      if (!_id) {
+        return res
+          .status(400)
+          .send({ message: "Missing userId or propertyId" });
+      }
+      const favorite = await favoritesCollection.deleteOne({
+        _id: new ObjectId(_id),
+      });
+      res.send(favorite);
+    });
+
     // get favorites
     app.get("/api/properties/favorites", async (req, res) => {
       const { userId } = req.query;
-      console.log(req.url);
-      if (!userId) {
-        return res.status(400).send({ message: "Missing userId" });
-      }
-      const favorites = await favoritesCollection
-        .find({ userId: userId })
+      const favoriteProperties = await favoritesCollection
+        .aggregate([
+          { $match: { userId: userId } },
+
+          {
+            $addFields: {
+              propertyObjectId: { $toObjectId: "$propertyId" },
+            },
+          },
+
+          {
+            $lookup: {
+              from: "properties",
+              localField: "propertyObjectId",
+              foreignField: "_id",
+              as: "propertyDetails",
+            },
+          },
+
+          { $unwind: "$propertyDetails" },
+
+          {
+            $project: {
+              _id: "$_id",
+              title: "$propertyDetails.title",
+              type: "$propertyDetails.propertyType",
+              location: "$propertyDetails.location",
+              price: "$propertyDetails.rent",
+              beds: "$propertyDetails.bedrooms",
+              baths: "$propertyDetails.bathrooms",
+            },
+          },
+        ])
         .toArray();
-      console.log(favorites);
-      res.send(favorites);
+      console.log(favoriteProperties);
+      res.send(favoriteProperties);
     });
 
     // tenant review submission
@@ -215,7 +256,7 @@ async function run() {
     app.post("/api/properties/bookings", async (req, res) => {
       const { userId, propertyId } = req.body;
       const data = req.body;
-      console.log(data);
+      // console.log(data);
       if (!userId || !propertyId) {
         return res
           .status(400)
