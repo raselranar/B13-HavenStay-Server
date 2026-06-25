@@ -215,6 +215,7 @@ async function run() {
     app.post("/api/properties/bookings", async (req, res) => {
       const { userId, propertyId } = req.body;
       const data = req.body;
+      console.log(data);
       if (!userId || !propertyId) {
         return res
           .status(400)
@@ -225,6 +226,18 @@ async function run() {
         createdAt: new Date(),
       });
       res.send(booking);
+    });
+
+    // get bookings
+    app.get("/api/properties/bookings", async (req, res) => {
+      const { userId } = req.body.session;
+      if (!userId) {
+        return res.status(400).send({ message: "Missing userId" });
+      }
+      const bookings = await bookingCollection
+        .find({ userId: userId })
+        .toArray();
+      res.send(bookings);
     });
   } finally {
     // Ensures that the client will close when you finish/error
