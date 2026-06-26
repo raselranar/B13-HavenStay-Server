@@ -51,6 +51,14 @@ const verifyTenant = async (req, res, next) => {
   }
   next();
 };
+// verify owner
+const verifyOwner = async (req, res, next) => {
+  const { user } = req;
+  if (user.role !== "owner") {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+  next();
+};
 
 async function run() {
   try {
@@ -343,6 +351,22 @@ async function run() {
           favoritesCount,
           activeRentalsCount,
         });
+      },
+    );
+
+    // owner routes
+    // add property
+    app.post(
+      "/api/owner/properties",
+      verifyToken,
+      verifyOwner,
+      async (req, res) => {
+        const data = req.body;
+        const property = await propertiesCollection.insertOne({
+          ...data,
+          createdAt: new Date(),
+        });
+        res.send(property);
       },
     );
   } finally {
