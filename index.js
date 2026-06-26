@@ -63,9 +63,9 @@ const verifyOwner = async (req, res, next) => {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
@@ -367,6 +367,46 @@ async function run() {
           createdAt: new Date(),
         });
         res.send(property);
+      },
+    );
+
+    // get properties
+    app.get(
+      "/api/owner/properties/:ownerId",
+      verifyToken,
+      verifyOwner,
+      async (req, res) => {
+        const ownerId = req.params.ownerId;
+        const query = {
+          "ownerInfo.ownerId": ownerId,
+        };
+        const properties = await propertiesCollection.find(query).toArray();
+        console.log({ properties, properties });
+        res.send(properties);
+      },
+    );
+
+    // update properties by id
+    app.put(
+      "/api/owner/properties/:id",
+      // verifyToken,
+      // verifyOwner,
+      async (req, res) => {
+        const id = req.params.id;
+        const { _id, ...updateData } = req.body;
+
+        const property = await propertiesCollection.findOne({
+          _id: new ObjectId(id),
+        });
+        if (!property) {
+          return res.status(404).send({ message: "Property not found" });
+        }
+        const updatedProperty = await propertiesCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updateData },
+        );
+        console.log(updatedProperty);
+        res.send(updatedProperty);
       },
     );
   } finally {
