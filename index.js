@@ -99,23 +99,28 @@ async function run() {
       res.send(properties);
     });
     // fetch single property by id
-    app.get("/api/properties/details/:id", async (req, res) => {
-      const { id } = req.params;
-      const userId = req.query?.userId;
-      // console.log("userId", userId);
-      const property = await propertiesCollection.findOne({
-        _id: new ObjectId(id),
-      });
-      const isFavorite = await favoritesCollection.findOne({
-        userId,
-        propertyId: id,
-      });
-      if (isFavorite) {
-        property.isFavorite = true;
-      }
+    app.get(
+      "/api/properties/details/:id",
+      verifyToken,
+      verifyTenant,
+      async (req, res) => {
+        const { id } = req.params;
+        const userId = req.query?.userId;
+        // console.log("userId", userId);
+        const property = await propertiesCollection.findOne({
+          _id: new ObjectId(id),
+        });
+        const isFavorite = await favoritesCollection.findOne({
+          userId,
+          propertyId: id,
+        });
+        if (isFavorite) {
+          property.isFavorite = true;
+        }
 
-      res.send(property);
-    });
+        res.send(property);
+      },
+    );
 
     // Featured Properties
     app.get("/api/properties/featured", async (req, res) => {
@@ -135,85 +140,100 @@ async function run() {
       res.send(recentProperties);
     });
     // Add to favorites
-    app.post("/api/properties/favorites", async (req, res) => {
-      const { userId, propertyId } = req.body;
-      if (!userId || !propertyId) {
-        return res
-          .status(400)
-          .send({ message: "Missing userId or propertyId" });
-      }
-      const favorite = await favoritesCollection.insertOne({
-        userId,
-        propertyId,
-        createdAt: new Date(),
-      });
-      // update property
-      await propertiesCollection.updateOne(
-        { _id: new ObjectId(propertyId) },
-        { $inc: { favorites: 1 } },
-      );
-      res.send(favorite);
-    });
+    app.post(
+      "/api/properties/favorites",
+      verifyToken,
+      verifyTenant,
+      async (req, res) => {
+        const { userId, propertyId } = req.body;
+        if (!userId || !propertyId) {
+          return res
+            .status(400)
+            .send({ message: "Missing userId or propertyId" });
+        }
+        const favorite = await favoritesCollection.insertOne({
+          userId,
+          propertyId,
+          createdAt: new Date(),
+        });
+        // update property
+        await propertiesCollection.updateOne(
+          { _id: new ObjectId(propertyId) },
+          { $inc: { favorites: 1 } },
+        );
+        res.send(favorite);
+      },
+    );
     // remove form favorites
-    app.delete("/api/properties/favorites", async (req, res) => {
-      const { _id } = req.body;
-      if (!_id) {
-        return res
-          .status(400)
-          .send({ message: "Missing userId or propertyId" });
-      }
-      const favorite = await favoritesCollection.deleteOne({
-        _id: new ObjectId(_id),
-      });
-      res.send(favorite);
-    });
+    app.delete(
+      "/api/properties/favorites",
+      verifyToken,
+      verifyTenant,
+      async (req, res) => {
+        const { _id } = req.body;
+        if (!_id) {
+          return res
+            .status(400)
+            .send({ message: "Missing userId or propertyId" });
+        }
+        const favorite = await favoritesCollection.deleteOne({
+          _id: new ObjectId(_id),
+        });
+        res.send(favorite);
+      },
+    );
 
     // get favorites
-    app.get("/api/properties/favorites", async (req, res) => {
-      const { userId } = req.query;
-      const favoriteProperties = await favoritesCollection
-        .aggregate([
-          { $match: { userId: userId } },
+    app.get(
+      "/api/properties/favorites",
+      verifyToken,
+      verifyTenant,
+      async (req, res) => {
+        const { userId } = req.query;
+        const favoriteProperties = await favoritesCollection
+          .aggregate([
+            { $match: { userId: userId } },
 
-          {
-            $addFields: {
-              propertyObjectId: { $toObjectId: "$propertyId" },
+            {
+              $addFields: {
+                propertyObjectId: { $toObjectId: "$propertyId" },
+              },
             },
-          },
 
-          {
-            $lookup: {
-              from: "properties",
-              localField: "propertyObjectId",
-              foreignField: "_id",
-              as: "propertyDetails",
+            {
+              $lookup: {
+                from: "properties",
+                localField: "propertyObjectId",
+                foreignField: "_id",
+                as: "propertyDetails",
+              },
             },
-          },
 
-          { $unwind: "$propertyDetails" },
+            { $unwind: "$propertyDetails" },
 
-          {
-            $project: {
-              _id: "$_id",
-              title: "$propertyDetails.title",
-              type: "$propertyDetails.propertyType",
-              location: "$propertyDetails.location",
-              price: "$propertyDetails.rent",
-              beds: "$propertyDetails.bedrooms",
-              baths: "$propertyDetails.bathrooms",
+            {
+              $project: {
+                _id: "$_id",
+                title: "$propertyDetails.title",
+                type: "$propertyDetails.propertyType",
+                location: "$propertyDetails.location",
+                price: "$propertyDetails.rent",
+                beds: "$propertyDetails.bedrooms",
+                baths: "$propertyDetails.bathrooms",
+              },
             },
-          },
-        ])
-        .toArray();
-      console.log(favoriteProperties);
-      res.send(favoriteProperties);
-    });
+          ])
+          .toArray();
+        console.log(favoriteProperties);
+        res.send(favoriteProperties);
+      },
+    );
 
     // tenant review submission
     app.post(
       "/api/properties/reviews",
-      // verifyToken,
-      // verifyTenant,
+      verifyToken,
+      verifyTenant,
       async (req, res) => {
         const { propertyId, rating, comment } = req.body;
         const user = req.body?.user;
@@ -253,63 +273,78 @@ async function run() {
     );
 
     // add booking
-    app.post("/api/properties/bookings", async (req, res) => {
-      const { userId, propertyId } = req.body;
-      const data = req.body;
-      // console.log(data);
-      if (!userId || !propertyId) {
-        return res
-          .status(400)
-          .send({ message: "Missing userId or propertyId" });
-      }
-      const booking = await bookingCollection.insertOne({
-        ...data,
-        createdAt: new Date(),
-      });
-      res.send(booking);
-    });
+    app.post(
+      "/api/properties/bookings",
+      verifyToken,
+      verifyTenant,
+      async (req, res) => {
+        const { userId, propertyId } = req.body;
+        const data = req.body;
+        // console.log(data);
+        if (!userId || !propertyId) {
+          return res
+            .status(400)
+            .send({ message: "Missing userId or propertyId" });
+        }
+        const booking = await bookingCollection.insertOne({
+          ...data,
+          createdAt: new Date(),
+        });
+        res.send(booking);
+      },
+    );
 
     // get bookings
-    app.get("/api/properties/bookings", async (req, res) => {
-      const { userId } = req.body.session;
-      if (!userId) {
-        return res.status(400).send({ message: "Missing userId" });
-      }
-      const bookings = await bookingCollection
-        .find({ userId: userId })
-        .toArray();
-      res.send(bookings);
-    });
+    app.get(
+      "/api/properties/bookings",
+      verifyToken,
+      verifyTenant,
+      async (req, res) => {
+        const { userId } = req.body.session;
+        if (!userId) {
+          return res.status(400).send({ message: "Missing userId" });
+        }
+        const bookings = await bookingCollection
+          .find({ userId: userId })
+          .toArray();
+        res.send(bookings);
+      },
+    );
 
     // get analytics data
-    app.get("/api/properties/tenant-analytics", async (req, res) => {
-      const { userId } = req.body?.session;
-      if (!userId) {
-        return res.status(400).send({ message: "Missing userId" });
-      }
-      const totalBookings = bookingCollection.countDocuments({
-        userId: userId,
-      });
-      const totalFavorites = favoritesCollection.countDocuments({
-        userId: userId,
-      });
-      const totalActiveRentals = bookingCollection.countDocuments({
-        userId: userId,
-        bookingStatus: "confirmed",
-      });
-      const [bookingsCount, favoritesCount, activeRentalsCount] =
-        await Promise.all([totalBookings, totalFavorites, totalActiveRentals]);
-      console.log({
-        bookingsCount,
-        favoritesCount,
-        activeRentalsCount,
-      });
-      res.send({
-        bookingsCount,
-        favoritesCount,
-        activeRentalsCount,
-      });
-    });
+    app.get(
+      "/api/properties/tenant-analytics",
+      verifyToken,
+      verifyTenant,
+      async (req, res) => {
+        const { userId } = req.body?.session;
+        if (!userId) {
+          return res.status(400).send({ message: "Missing userId" });
+        }
+        const totalBookings = bookingCollection.countDocuments({
+          userId: userId,
+        });
+        const totalFavorites = favoritesCollection.countDocuments({
+          userId: userId,
+        });
+        const totalActiveRentals = bookingCollection.countDocuments({
+          userId: userId,
+          bookingStatus: "confirmed",
+        });
+        const [bookingsCount, favoritesCount, activeRentalsCount] =
+          await Promise.all([
+            totalBookings,
+            totalFavorites,
+            totalActiveRentals,
+          ]);
+
+        res.send({
+          bookingsCount,
+          favoritesCount,
+          activeRentalsCount,
+        });
+      },
+    );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
