@@ -38,7 +38,7 @@ const verifyToken = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.log(error);
+    // console.log(error);
     return res.status(401).send({ message: "Unauthorized" });
   }
 };
@@ -232,7 +232,7 @@ async function run() {
             },
           ])
           .toArray();
-        console.log(favoriteProperties);
+        // console.log(favoriteProperties);
         res.send(favoriteProperties);
       },
     );
@@ -288,6 +288,7 @@ async function run() {
       async (req, res) => {
         const { userId, propertyId } = req.body;
         const data = req.body;
+
         // console.log(data);
         if (!userId || !propertyId) {
           return res
@@ -308,13 +309,36 @@ async function run() {
       verifyToken,
       verifyTenant,
       async (req, res) => {
+        const query = {};
         const { userId } = req.body.session;
+        const transactionId = req.body.transactionId;
+        console.log(transactionId);
+        if (transactionId) query.transactionId = transactionId;
+
         if (!userId) {
           return res.status(400).send({ message: "Missing userId" });
         }
-        const bookings = await bookingCollection
-          .find({ userId: userId })
-          .toArray();
+        query.userId = userId;
+        const bookings = await bookingCollection.find(query).toArray();
+        res.send(bookings);
+      },
+    );
+    // get bookings
+    app.get(
+      "/api/properties/bookings",
+      verifyToken,
+      verifyOwner,
+      async (req, res) => {
+        const query = {};
+        const { userId } = req.body.session;
+        const stripId = req.query.stripId;
+        if (stripId) query.stripId = stripId;
+
+        if (!userId) {
+          return res.status(400).send({ message: "Missing userId" });
+        }
+        query.userId = userId;
+        const bookings = await bookingCollection.find(query).toArray();
         res.send(bookings);
       },
     );
@@ -381,16 +405,63 @@ async function run() {
           "ownerInfo.ownerId": ownerId,
         };
         const properties = await propertiesCollection.find(query).toArray();
-        console.log({ properties, properties });
         res.send(properties);
+      },
+    );
+
+    // get owner booking requests
+    app.get(
+      "/api/owner/bookings/:ownerId",
+      verifyToken,
+      verifyOwner,
+      async (req, res) => {
+        const ownerId = req.params.ownerId;
+        const bookings = await bookingCollection
+          .find({ "ownerInfo.ownerId": ownerId })
+          .toArray();
+        console.log({ bookings });
+        res.send(bookings);
+      },
+    );
+
+    // update booking status for owner
+    app.put(
+      "/api/owner/bookings",
+      verifyToken,
+      verifyOwner,
+      async (req, res) => {
+        const { id, bookingStatus } = req.body;
+        if (!id || !bookingStatus) {
+          return res
+            .status(400)
+            .send({ message: "Missing id or bookingStatus" });
+        }
+
+        const booking = await bookingCollection.findOne({
+          _id: new ObjectId(id),
+        });
+        if (!booking) {
+          return res.status(404).send({ message: "Booking not found" });
+        }
+
+        const updated = await bookingCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { bookingStatus, updatedAt: new Date() } },
+        );
+
+        if (updated.matchedCount === 0) {
+          return res.status(404).send({ message: "Booking not found" });
+        }
+
+        res.send({ success: true, bookingStatus });
       },
     );
 
     // update properties by id
     app.put(
       "/api/owner/properties/:id",
-      // verifyToken,
-      // verifyOwner,
+      verifyToken,
+      verifyOwner,
       async (req, res) => {
         const id = req.params.id;
         const { _id, ...updateData } = req.body;
@@ -405,10 +476,22 @@ async function run() {
           { _id: new ObjectId(id) },
           { $set: updateData },
         );
-        console.log(updatedProperty);
         res.send(updatedProperty);
       },
     );
+    // delete property by id
+    app.delete("/api/owner/properties", async (req, res) => {
+      const id = req.body.id;
+      console.log({ id });
+      const result = await propertiesCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      if (result.deletedCount < 1) {
+        return res.status(404).send({ message: "Property not found" });
+      }
+      console.log({ result });
+      res.send(result);
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
