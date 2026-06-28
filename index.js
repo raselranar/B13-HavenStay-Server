@@ -492,6 +492,50 @@ async function run() {
       console.log({ result });
       res.send(result);
     });
+
+    // get analytics data
+    app.get(
+      "/api/owner/analytics",
+      verifyToken,
+      verifyOwner,
+      async (req, res) => {
+        const { userId } = req.body?.session;
+        if (!userId) {
+          return res.status(400).send({ message: "Missing userId" });
+        }
+        const totalEarningsResult = await bookingCollection
+          .aggregate([
+            {
+              $match: {
+                paymentStatus: "paid",
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: { $toDouble: "$rent" } },
+              },
+            },
+          ])
+          .toArray();
+        const totalEarningsSum = totalEarningsResult[0]?.total || 0;
+        const propertiesCount = propertiesCollection.countDocuments({
+          "ownerInfo.ownerId": userId,
+        });
+        const bookingsCount = bookingCollection.countDocuments({
+          userId: userId,
+          bookingStatus: "approved",
+        });
+        const [totalEarnings, totalProperties, totalBookings] =
+          await Promise.all([totalEarningsSum, propertiesCount, bookingsCount]);
+
+        res.send({
+          totalEarnings,
+          totalProperties,
+          totalBookings,
+        });
+      },
+    );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
