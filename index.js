@@ -60,6 +60,15 @@ const verifyOwner = async (req, res, next) => {
   next();
 };
 
+// verify admin
+const verifyAdmin = async (req, res, next) => {
+  const { user } = req;
+  if (user.role !== "admin") {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+  next();
+};
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
@@ -73,6 +82,7 @@ async function run() {
     const propertiesCollection = database.collection("properties");
     const favoritesCollection = database.collection("favorites");
     const bookingCollection = database.collection("bookings");
+    const usersCollection = database.collection("user");
 
     //  fetch all properties
     app.get("/api/properties", async (req, res) => {
@@ -480,18 +490,23 @@ async function run() {
       },
     );
     // delete property by id
-    app.delete("/api/owner/properties", async (req, res) => {
-      const id = req.body.id;
-      console.log({ id });
-      const result = await propertiesCollection.deleteOne({
-        _id: new ObjectId(id),
-      });
-      if (result.deletedCount < 1) {
-        return res.status(404).send({ message: "Property not found" });
-      }
-      console.log({ result });
-      res.send(result);
-    });
+    app.delete(
+      "/api/owner/properties",
+      verifyToken,
+      verifyOwner,
+      async (req, res) => {
+        const id = req.body.id;
+        console.log({ id });
+        const result = await propertiesCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        if (result.deletedCount < 1) {
+          return res.status(404).send({ message: "Property not found" });
+        }
+        console.log({ result });
+        res.send(result);
+      },
+    );
 
     // get analytics data
     app.get(
@@ -585,13 +600,47 @@ async function run() {
       },
     );
 
-    app.get("/api/owner/monthly-earnings", async (req, res) => {
-      try {
-        res.status(200).json(formattedData);
-      } catch (error) {
-        res.status(500).json({ error: "Internal Server Error" });
-      }
+    app.get(
+      "/api/owner/monthly-earnings",
+      verifyToken,
+      verifyOwner,
+      async (req, res) => {
+        try {
+          res.status(200).json(formattedData);
+        } catch (error) {
+          res.status(500).json({ error: "Internal Server Error" });
+        }
+      },
+    );
+
+    // admin routes
+
+    // get all users
+    app.get("/api/admin/users", verifyToken, verifyAdmin, async (req, res) => {
+      const users = await usersCollection.find().toArray();
+      res.send(users);
     });
+    // change users role
+    app.patch(
+      "/api/admin/users/:userId/role",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const userId = req.params.userId;
+        const { role } = req.body;
+        const user = await usersCollection.findOne({
+          _id: new ObjectId(userId),
+        });
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
+        const updatedUser = await usersCollection.updateOne(
+          { _id: new ObjectId(userId) },
+          { $set: { role } },
+        );
+        res.send(updatedUser);
+      },
+    );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
