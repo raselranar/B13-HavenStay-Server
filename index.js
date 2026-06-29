@@ -641,6 +641,121 @@ async function run() {
         res.send(updatedUser);
       },
     );
+    // get all properties
+    app.get(
+      "/api/admin/properties",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const properties = await propertiesCollection.find().toArray();
+        res.send(properties);
+      },
+    );
+
+    // change properties status
+    app.patch(
+      "/api/admin/properties/:propertyId/status",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const propertyId = req.params.propertyId;
+        const { status, rejectionFeedback } = req.body;
+
+        const property = await propertiesCollection.findOne({
+          _id: new ObjectId(propertyId),
+        });
+
+        if (!property) {
+          return res.status(404).send({ message: "Property not found" });
+        }
+
+        const updateData = { status };
+
+        if (rejectionFeedback) {
+          updateData.rejectionFeedback = rejectionFeedback;
+        } else {
+          updateData.rejectionFeedback = "";
+        }
+
+        const result = await propertiesCollection.updateOne(
+          { _id: new ObjectId(propertyId) },
+          { $set: updateData },
+        );
+
+        res.send(result);
+      },
+    );
+
+    // update property details as admin
+    app.put(
+      "/api/admin/properties/:propertyId",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const propertyId = req.params.propertyId;
+        const { _id, ...updateData } = req.body;
+
+        const property = await propertiesCollection.findOne({
+          _id: new ObjectId(propertyId),
+        });
+        if (!property) {
+          return res.status(404).send({ message: "Property not found" });
+        }
+
+        const result = await propertiesCollection.updateOne(
+          { _id: new ObjectId(propertyId) },
+          { $set: updateData },
+        );
+        res.send(result);
+      },
+    );
+
+    app.delete(
+      "/api/admin/properties/:propertyId",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const propertyId = req.params.propertyId;
+
+        const result = await propertiesCollection.deleteOne({
+          _id: new ObjectId(propertyId),
+        });
+        if (result.deletedCount < 1) {
+          return res.status(404).send({ message: "Property not found" });
+        }
+
+        res.send(result);
+      },
+    );
+    // transactions
+    app.get(
+      "/api/admin/transactions",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const bookings = await bookingCollection
+          .find({ transactionId: { $exists: true } })
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        const transactions = bookings.map((booking) => ({
+          id: booking.transactionId,
+          tenantName: booking.userName || "Unknown Tenant",
+          ownerName: booking.ownerInfo?.name || "Unknown Owner",
+          propertyTitle: booking.title || "Unknown Property",
+          amount: Number(booking.rent) || 0,
+          date: booking.createdAt
+            ? booking.createdAt.toISOString().slice(0, 10)
+            : "",
+          status:
+            booking.paymentStatus === "paid"
+              ? "completed"
+              : booking.paymentStatus || "pending",
+        }));
+
+        res.send(transactions);
+      },
+    );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
