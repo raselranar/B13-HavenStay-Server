@@ -523,9 +523,56 @@ async function run() {
           "ownerInfo.ownerId": userId,
         });
         const bookingsCount = bookingCollection.countDocuments({
-          userId: userId,
-          bookingStatus: "approved",
+          "ownerInfo.ownerId": userId,
         });
+        const monthlyEarningsResult = await bookingCollection
+          .aggregate([
+            {
+              $match: {
+                paymentStatus: "paid",
+              },
+            },
+            {
+              $group: {
+                _id: {
+                  month: { $month: "$createdAt" },
+                },
+                earnings: { $sum: { $toDouble: "$rent" } },
+              },
+            },
+            {
+              $sort: { "_id.month": 1 },
+            },
+          ])
+          .toArray();
+
+        const monthNames = [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ];
+
+        const monthlyEarnings = monthNames.map((month, index) => ({
+          month: month,
+          earnings: 0,
+        }));
+
+        monthlyEarningsResult.forEach((item) => {
+          const monthIndex = item._id.month - 1;
+          if (monthIndex >= 0 && monthIndex < 12) {
+            monthlyEarnings[monthIndex].earnings = item.earnings;
+          }
+        });
+        console.log(monthlyEarnings);
         const [totalEarnings, totalProperties, totalBookings] =
           await Promise.all([totalEarningsSum, propertiesCount, bookingsCount]);
 
@@ -533,9 +580,18 @@ async function run() {
           totalEarnings,
           totalProperties,
           totalBookings,
+          monthlyEarnings,
         });
       },
     );
+
+    app.get("/api/owner/monthly-earnings", async (req, res) => {
+      try {
+        res.status(200).json(formattedData);
+      } catch (error) {
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
